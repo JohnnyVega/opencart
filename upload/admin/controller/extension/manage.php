@@ -44,7 +44,7 @@ class ControllerExtensionManage extends Controller {
     	}		
 		
 		if (!empty($this->request->files['file']['name'])) {
-			if (substr(strrchr($this->request->files['file']['name'], '.'), 1) != 'zip') {
+			if (strrchr($this->request->files['file']['name'], '.') != '.zip') {
 				$json['error'] = $this->language->get('error_filetype');
        		}
 					
@@ -65,9 +65,9 @@ class ControllerExtensionManage extends Controller {
 			$zip->extractTo($directory);
 			$zip->close();
 			
+			// Remove Zip
 			unlink($file);
 			
-			/*
 			// Get a list of files ready to upload
 			$files = array();
 			
@@ -85,8 +85,8 @@ class ControllerExtensionManage extends Controller {
 				}
 			}
 			
-			sort($files);		
-			
+			sort($files);
+					
 			// Connect to the site via FTP
 			$connection = ftp_connect($this->config->get('config_ftp_host'), $this->config->get('config_ftp_port'));
 	
@@ -100,24 +100,40 @@ class ControllerExtensionManage extends Controller {
 				exit('Couldn\'t connect as ' . $this->config->get('config_ftp_username'));
 			}
 			
-			// Upload files
+			if ($this->config->get('config_ftp_root')) {
+				$root = ftp_chdir($connection, $this->config->get('config_ftp_root'));
+				
+				if (!$root) {
+					exit('Couldn\'t change to directory ' . $this->config->get('config_ftp_root'));
+				}
+			}
+		
 			foreach ($files as $file) {
 				$destination = substr($file, strlen($directory));
 				
-				if (is_dir($file)) {
-					$list = ftp_nlist($connection, $this->config->get('config_ftp_root') . substr($destination, 0, strrpos($destination, '/')));
-	
-					if (!in_array(basename($destination), $list)) {
-						if (ftp_mkdir($connection, $this->config->get('config_ftp_root') . $destination)) {
-							echo 'made directory ' . $destination . '<br />';
+				// Upload everything in the upload directory
+				if (substr($destination, 0, 7) == 'upload/') {
+					$destination = substr($destination, 7);
+					
+					if (is_dir($file)) {
+						$list = ftp_nlist($connection, substr($destination, 0, strrpos($destination, '/')));
+						
+						if (!in_array($destination, $list)) {
+							if (ftp_mkdir($connection, $destination)) {
+								echo 'made directory ' . $destination . '<br />';
+							}
+						}
+					}	
+					
+					if (is_file($file)) {
+						if (ftp_put($connection, $destination, $file, FTP_ASCII)) {		
+							echo 'Successfully uploaded ' . $file . '<br />';
 						}
 					}
-				}		
-				
-				if (is_file($file)) {
-					if (ftp_put($connection, trim($this->config->get('config_ftp_root'), '/') . '/' . $destination, $file, FTP_ASCII)) {		
-						echo 'Successfully uploaded ' . $file . '<br />';
-					}
+				} elseif (strrchr(basename($file), '.') == '.sql') {
+					//file_get_contents($file);
+				} elseif (strrchr(basename($file), '.') == '.xml') {
+					//file_get_contents($file);
 				}
 			}
 			
@@ -126,11 +142,18 @@ class ControllerExtensionManage extends Controller {
 			rsort($files);
 						
 			foreach ($files as $file) {
-				unlink($file);
+				if (is_file($file)) {
+					unlink($file);
+				} elseif (is_dir($file)) {
+					rmdir($file);	
+				}
+			}
+			
+			if (file_exists($directory)) {
+				rmdir($directory);
 			}
 						
 			$json['success'] = $this->language->get('text_success');
-			*/
 		}	
 		
 		$this->response->setOutput(json_encode($json));
